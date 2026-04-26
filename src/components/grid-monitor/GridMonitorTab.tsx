@@ -71,7 +71,7 @@ export default function GridMonitorTab() {
       </div>
 
       {/* ── Row 3 (45%): Weather overlay (+ Alarm feed in demo mode) ── */}
-      <div className="flex gap-3 overflow-hidden" style={{ flex: '39 1 0%' }}>
+      <div className="flex gap-3 overflow-hidden min-h-0" style={{ flex: '39 1 0%' }}>
 
         {showAlarms && (
           <div className="flex-1 min-w-0 overflow-hidden">
@@ -81,14 +81,14 @@ export default function GridMonitorTab() {
           </div>
         )}
 
-        <div className="min-w-0 overflow-hidden" style={{ flex: showAlarms ? '1 1 0%' : '1 1 100%' }}>
+        <div className="min-w-0 min-h-0 overflow-hidden" style={{ flex: showAlarms ? '1 1 0%' : '1 1 100%' }}>
           <GlassCard className="h-full flex flex-col" noPadding>
             <div className="px-3 pt-2.5 pb-1 flex-shrink-0 border-b border-[var(--border-subtle)]">
               <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
                 Weather (Austin · ERCOT)
               </span>
             </div>
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden">
               <WeatherOverlay />
             </div>
           </GlassCard>

@@ -97,6 +97,8 @@ export function useGridDashboard() {
         if (disposed || ctrl.signal.aborted) return
         fastFailures += 1
         if (fastFailures >= MAX_RETRIES) store().setIsError(true)
+        // Fast-load API failures are runtime data issues and should not be
+        // confused with SSR hydration mismatches.
         console.error('[useGridDashboard] fast poll failed', err)
       }
     }
