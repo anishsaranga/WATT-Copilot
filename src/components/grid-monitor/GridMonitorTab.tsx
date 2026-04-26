@@ -57,7 +57,7 @@ export default function GridMonitorTab() {
       </div>
 
       {/* ── Row 2 (22%): Regional LMP ── */}
-      <div className="overflow-hidden" style={{ flex: '22 1 0%' }}>
+      <div className="overflow-hidden" style={{ flex: '28 1 0%' }}>
         <GlassCard className="h-full flex flex-col" noPadding>
           <div className="px-3 pt-2.5 pb-1 flex-shrink-0 border-b border-[var(--border-subtle)]">
             <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
@@ -71,7 +71,7 @@ export default function GridMonitorTab() {
       </div>
 
       {/* ── Row 3 (45%): Weather overlay (+ Alarm feed in demo mode) ── */}
-      <div className="flex gap-3 overflow-hidden" style={{ flex: '45 1 0%' }}>
+      <div className="flex gap-3 overflow-hidden" style={{ flex: '39 1 0%' }}>
 
         {showAlarms && (
           <div className="flex-1 min-w-0 overflow-hidden">

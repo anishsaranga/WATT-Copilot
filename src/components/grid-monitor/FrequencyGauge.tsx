@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { motion } from 'motion/react'
 import { useGridStore } from '@/stores/gridStore'
 import { getFrequencyZone } from '@/lib/formatters'
 import {
@@ -135,10 +134,13 @@ export default function FrequencyGauge() {
         })}
 
         {/* Needle */}
-        <motion.g
-          animate={{ rotate: needleDeg - (-90) }}
-          style={{ transformOrigin: `${CX}px ${CY}px` }}
-          transition={{ type: 'spring', stiffness: 100, damping: 18 }}
+        <g
+          style={{
+            transform: `rotate(${needleDeg + 90}deg)`,
+            transformOrigin: `${CX}px ${CY}px`,
+            transformBox: 'view-box',
+            transition: 'transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
         >
           <line
             x1={CX} y1={CY + 10}
@@ -147,7 +149,7 @@ export default function FrequencyGauge() {
             strokeWidth={2}
             strokeLinecap="round"
           />
-        </motion.g>
+        </g>
 
         {/* Center hub */}
         <circle cx={CX} cy={CY} r={7} fill="var(--bg-primary)" stroke={zoneColor} strokeWidth={1.5} />

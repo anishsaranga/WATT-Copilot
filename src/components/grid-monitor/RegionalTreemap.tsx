@@ -14,7 +14,7 @@ function PriceTile({ label, sub, lmp }: { label: string; sub: string; lmp: LMPRo
   const color = lmp ? priceColor(lmp.lmp) : 'var(--text-muted)'
   return (
     <div
-      className="flex flex-col justify-between rounded p-2 border border-[var(--border-subtle)] overflow-hidden"
+      className="flex flex-col justify-between rounded px-2 py-1.5 border border-[var(--border-subtle)] overflow-hidden"
       style={{
         background: lmp ? `linear-gradient(135deg, ${color}11 0%, transparent 70%)` : 'transparent',
       }}
@@ -34,7 +34,7 @@ function PriceTile({ label, sub, lmp }: { label: string; sub: string; lmp: LMPRo
         <span className="font-mono text-xs text-[var(--text-muted)] mt-1">No data</span>
       )}
       {lmp && (
-        <div className="flex gap-2 mt-1 font-mono text-[9px] text-[var(--text-muted)] flex-wrap">
+        <div className="flex gap-2 mt-1 font-mono text-[9px] text-[var(--text-muted)]">
           <span>E ${lmp.energy.toFixed(1)}</span>
           <span>C ${lmp.congestion.toFixed(1)}</span>
           <span>L ${lmp.loss.toFixed(1)}</span>
@@ -49,7 +49,7 @@ export default function RegionalTreemap() {
   const pjm = useGridStore((s) => s.lmpPJMRealtime)
 
   return (
-    <div className="w-full h-full p-3 grid grid-cols-2 gap-3" aria-label="Regional LMP pricing">
+    <div className="w-full h-full p-2 grid grid-cols-2 gap-3" aria-label="Regional LMP pricing">
       <PriceTile label="ERCOT" sub={ercot?.location ?? 'HB_NORTH'} lmp={ercot} />
       <PriceTile label="PJM" sub={pjm?.location ?? 'PJM RTO'} lmp={pjm} />
     </div>
