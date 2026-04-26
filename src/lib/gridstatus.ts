@@ -26,9 +26,12 @@ function ensureKey(): string {
   return k
 }
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
 async function gs<T>(
   dataset: string,
   params: Record<string, string>,
+  attempt = 0,
 ): Promise<T[]> {
   const url = new URL(`${BASE}/${dataset}/query`)
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
@@ -37,6 +40,18 @@ async function gs<T>(
     headers: { 'x-api-key': ensureKey() },
     cache: 'no-store',
   })
+
+  if (res.status === 429) {
+    if (attempt >= 1) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`GridStatus [${dataset}] 429: ${body.slice(0, 160)}`)
+    }
+    // Honour Retry-After header when present, otherwise backoff 2s
+    const retryAfterRaw = res.headers.get('retry-after')
+    const waitMs = retryAfterRaw ? Math.max(parseInt(retryAfterRaw, 10) * 1000, 1100) : 2200
+    await sleep(waitMs)
+    return gs<T>(dataset, params, attempt + 1)
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -56,6 +71,14 @@ function isoMinsAgo(minutes: number): string {
 function isoHoursAgo(hours: number): string {
   return new Date(Date.now() - hours * 60 * 60_000).toISOString()
 }
+
+// ── Module-level cache for ercot_load ─────────────────────────────────────────
+// Both /api/grid and /api/grid/load call fetchLoadLatest. Without a shared
+// cache they race on startup and exhaust the "1 per 1 second" rate limit.
+// Cache TTL is 25s — safely below the 30s client fast-poll interval.
+const LOAD_CACHE_TTL = 25_000
+let _loadLatestCache: { row: ERCOTLoadRow; expiresAt: number } | null = null
+let _loadLatestInflight: Promise<ERCOTLoadRow> | null = null
 
 function coerceERCOTLoadRow(r: unknown): ERCOTLoadRow {
   if (!isObj(r) || typeof r.interval_start_utc !== 'string' || !isFiniteNumber(r.load)) {
@@ -107,14 +130,27 @@ function coerceLMPRow(r: unknown): LMPRow {
   }
 }
 
-// ercot_load has no `time=latest`; fetch a recent window and take the last row
+// ercot_load has no `time=latest`; fetch a recent window and take the last row.
+// Uses a module-level cache + inflight dedup to prevent concurrent callers
+// (both route handlers) from each firing a request within the same second.
 export async function fetchLoadLatest(): Promise<ERCOTLoadRow> {
-  const rows = await gs<unknown>('ercot_load', {
-    start_time: isoMinsAgo(30),
-    limit: '12',
-  })
-  if (rows.length === 0) throw new Error('ercot_load: no rows in last 30 min')
-  return coerceERCOTLoadRow(rows[rows.length - 1])
+  if (_loadLatestCache && Date.now() < _loadLatestCache.expiresAt) {
+    return _loadLatestCache.row
+  }
+  if (_loadLatestInflight) return _loadLatestInflight
+
+  _loadLatestInflight = (async () => {
+    const rows = await gs<unknown>('ercot_load', {
+      start_time: isoMinsAgo(30),
+      limit: '12',
+    })
+    if (rows.length === 0) throw new Error('ercot_load: no rows in last 30 min')
+    const row = coerceERCOTLoadRow(rows[rows.length - 1])
+    _loadLatestCache = { row, expiresAt: Date.now() + LOAD_CACHE_TTL }
+    return row
+  })().finally(() => { _loadLatestInflight = null })
+
+  return _loadLatestInflight
 }
 
 export async function fetchLoadWindow(hoursBack: number): Promise<ERCOTLoadRow[]> {

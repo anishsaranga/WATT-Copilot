@@ -10,9 +10,12 @@ import {
   type SimulatorState,
 } from '@/lib/mock-data/incidentSimulator'
 import type { DashboardSnapshot, FastLoadSnapshot } from '@/lib/types'
-import { SPARKLINE_POINTS, LOAD_HISTORY_POINTS } from '@/lib/constants'
+import { SPARKLINE_POINTS } from '@/lib/constants'
 
 const POLL_FULL_MS = 5 * 60_000
+// Initial fast-poll fires after 20s so the full route (~8-9s serial execution)
+// finishes before /api/grid/load also calls ercot_load — avoids 429 race.
+const POLL_FAST_BOOT_MS = 20_000
 const POLL_FAST_MS = 30_000
 const MAX_RETRIES = 3
 
@@ -46,36 +49,40 @@ async function fetchJson<T>(
 }
 
 export function useGridDashboard() {
+  // Only subscribe to the reactive value needed to switch modes.
+  // Store actions are accessed via getState() inside effects — they are
+  // stable references and do not belong in the deps array.
   const demoMode = useGridStore((s) => s.demoMode)
-  const setSnapshot = useGridStore((s) => s.setSnapshot)
-  const setFastLoad = useGridStore((s) => s.setFastLoad)
-  const setIsError = useGridStore((s) => s.setIsError)
-
-  const liveAbortRef = useRef<AbortController | null>(null)
   const simStateRef = useRef<SimulatorState | null>(null)
 
-  // Live polling effect
+  // ── Live polling ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (demoMode) return
 
     let disposed = false
     const ctrl = new AbortController()
-    liveAbortRef.current = ctrl
-
     let fullFailures = 0
     let fastFailures = 0
+
+    const store = () => useGridStore.getState()
+
+    // Show loading only on first mount when no data exists yet
+    if (!store().snapshot) store().setFetchStatus('loading')
 
     const pollFull = async () => {
       try {
         const snap = await fetchJson('/api/grid', ctrl.signal, isDashboardSnapshot)
         if (disposed) return
-        setSnapshot(snap)
+        store().setSnapshot(snap)
+        store().setIsError(false)
         fullFailures = 0
-        setIsError(false)
       } catch (err) {
         if (disposed || ctrl.signal.aborted) return
         fullFailures += 1
-        if (fullFailures >= MAX_RETRIES) setIsError(true)
+        if (fullFailures >= MAX_RETRIES) {
+          store().setIsError(true)
+          store().setFetchStatus(String(err).includes('429') ? 'rate_limited' : 'error')
+        }
         console.error('[useGridDashboard] full poll failed', err)
       }
     }
@@ -84,19 +91,20 @@ export function useGridDashboard() {
       try {
         const snap = await fetchJson('/api/grid/load', ctrl.signal, isFastLoadSnapshot)
         if (disposed) return
-        setFastLoad(snap)
+        store().setFastLoad(snap)
         fastFailures = 0
       } catch (err) {
         if (disposed || ctrl.signal.aborted) return
         fastFailures += 1
-        if (fastFailures >= MAX_RETRIES) setIsError(true)
+        if (fastFailures >= MAX_RETRIES) store().setIsError(true)
         console.error('[useGridDashboard] fast poll failed', err)
       }
     }
 
-    // Stagger: full first, then fast 1s later so the snapshot lands first
     void pollFull()
-    const fastBoot = window.setTimeout(() => void pollFast(), 1000)
+    // Delay first fast poll so the full route's serial GridStatus calls finish
+    // before /api/grid/load fires its own ercot_load request.
+    const fastBoot = window.setTimeout(() => void pollFast(), POLL_FAST_BOOT_MS)
     const fullId = window.setInterval(pollFull, POLL_FULL_MS)
     const fastId = window.setInterval(pollFast, POLL_FAST_MS)
 
@@ -107,9 +115,9 @@ export function useGridDashboard() {
       window.clearInterval(fullId)
       window.clearInterval(fastId)
     }
-  }, [demoMode, setSnapshot, setFastLoad, setIsError])
+  }, [demoMode]) // ← demoMode only; actions via getState() are stable
 
-  // Demo loop effect
+  // ── Demo loop ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!demoMode) {
       simStateRef.current = null
@@ -119,14 +127,12 @@ export function useGridDashboard() {
     const baseSnapshot = useGridStore.getState().snapshot
     simStateRef.current = createSimulatorState(baseSnapshot)
 
-    // Reset transient state for clean demo start
     useGridStore.setState({
       frequencyHistory: [],
       alarms: [],
       metrics: { ...useGridStore.getState().metrics, alarmCount: 0 },
     })
 
-    // Fire copilot scripted scenario once on cycle 0 start
     useCopilotStore.getState().runDemoScenario()
 
     let lastCycle = 0
@@ -137,20 +143,21 @@ export function useGridDashboard() {
       const now = Date.now()
       const frame = nextIncidentFrame(state, now)
 
-      const store = useGridStore.getState()
-      store.updateMetrics({
+      const gs = useGridStore.getState()
+      gs.updateMetrics({
         frequency: frame.frequency,
         load: frame.load,
         forecastLoad: frame.load * 1.01,
         forecastDeviation: ((frame.load - frame.load * 1.01) / (frame.load * 1.01)) * 100,
       })
-      store.pushFrequencyPoint({ timestamp: now, value: frame.frequency })
+      gs.pushFrequencyPoint({ timestamp: now, value: frame.frequency })
 
-      // Update sparkline only (MetricsStrip). loadHistory intentionally NOT
-      // updated — it holds 5-min API data and must not receive 1s demo points
-      // (would flood the LoadCurve X-axis with duplicate HH:mm labels).
-      const sp = useGridStore.getState().loadSparkline
-      const nextSp = [...sp, { timestamp: now, value: frame.load }].slice(-SPARKLINE_POINTS)
+      // Sparkline only — loadHistory intentionally NOT touched (holds 5-min
+      // API data; 1s writes would flood the LoadCurve X-axis).
+      const nextSp = [
+        ...useGridStore.getState().loadSparkline,
+        { timestamp: now, value: frame.load },
+      ].slice(-SPARKLINE_POINTS)
 
       useGridStore.setState({
         loadSparkline: nextSp,
@@ -159,11 +166,10 @@ export function useGridDashboard() {
         lmpPJMRealtime: frame.lmpPJM,
       })
 
-      for (const a of frame.newAlarms) store.addAlarm(a)
+      for (const a of frame.newAlarms) gs.addAlarm(a)
 
       if (frame.cycle > lastCycle) {
         lastCycle = frame.cycle
-        // Re-fire copilot scripted scenario per cycle
         useCopilotStore.getState().runDemoScenario()
       }
     }

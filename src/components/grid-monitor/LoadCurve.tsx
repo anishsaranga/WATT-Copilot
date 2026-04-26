@@ -43,8 +43,18 @@ export default function LoadCurve() {
 
   if (chartData.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-[var(--text-muted)] font-mono text-xs">
-        Loading...
+      <div className="flex items-end justify-center gap-1 h-full px-8 pb-6 pt-4">
+        {[0.45, 0.7, 0.55, 0.85, 0.65, 0.9, 0.75, 0.6, 0.8, 0.5, 0.7, 0.95].map((h, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-sm animate-pulse"
+            style={{
+              height: `${h * 100}%`,
+              background: `rgba(0,240,255,${0.06 + h * 0.08})`,
+              animationDelay: `${i * 60}ms`,
+            }}
+          />
+        ))}
       </div>
     )
   }
@@ -76,6 +86,7 @@ export default function LoadCurve() {
             axisLine={false}
             tickLine={false}
             interval="preserveStartEnd"
+            minTickGap={40}
           />
           <YAxis
             tick={{ fill: 'var(--text-muted)', fontSize: 9, fontFamily: 'IBM Plex Mono' }}

@@ -49,6 +49,8 @@ export interface DashboardSnapshot {
   load_history: ERCOTLoadRow[]
   fetched_at: string
   partial: boolean
+  rate_limited?: boolean
+  served_from_cache?: boolean
 }
 
 export interface FastLoadSnapshot {

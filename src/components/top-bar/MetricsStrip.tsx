@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { useGridStore } from '@/stores/gridStore'
 import MetricChip from './MetricChip'
 import ThemeToggle from '@/components/shared/ThemeToggle'
+import DataStatusChip from '@/components/shared/DataStatusChip'
 import {
   formatFrequency, formatMW, formatDeviation,
   getFrequencyZone,
@@ -139,7 +140,8 @@ export default function MetricsStrip() {
       />
 
       <div className="flex-1" />
-      <div className="flex items-center px-3 border-l border-[var(--border-subtle)]">
+      <div className="flex items-center gap-3 px-3 border-l border-[var(--border-subtle)]">
+        <DataStatusChip />
         <ThemeToggle />
       </div>
     </div>

@@ -17,20 +17,24 @@ import type {
 } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 300
 
-// GridStatus.io free tier: 1 request / second. Space sequential calls by this
-// margin so we don't get 429-ed. Open-Meteo has no such limit and runs in
-// parallel.
-const GRIDSTATUS_SPACING_MS = 1100
+// ─── Server-side dedup + TTL cache ────────────────────────────────────────────
+// Prevents concurrent browser loads / HMR hot-reloads from each firing 7
+// serial GridStatus calls and exhausting the 30-req/min free-tier quota.
+const CACHE_TTL_MS = 55_000
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+let cachedSnap: { snap: DashboardSnapshot; expiresAt: number } | null = null
+let inflightFetch: Promise<DashboardSnapshot> | null = null
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+const GRIDSTATUS_SPACING_MS = 1200
 
 async function tryGet<T>(label: string, fn: () => Promise<T>): Promise<T | null> {
   try {
     return await fn()
   } catch (err) {
-    console.error(`[api/grid] ${label} failed:`, err)
+    console.error(`[api/grid] ${label} failed:`, (err as Error).message)
     return null
   }
 }
@@ -44,53 +48,36 @@ async function fetchGridStatusSerial() {
     ercotDa: LMPRow[]
     pjmRt: LMPRow | null
     pjmDa: LMPRow[]
-  } = {
-    load: null,
-    fuel: null,
-    loadHistory: [],
-    ercotRt: null,
-    ercotDa: [],
-    pjmRt: null,
-    pjmDa: [],
-  }
+  } = { load: null, fuel: null, loadHistory: [], ercotRt: null, ercotDa: [], pjmRt: null, pjmDa: [] }
 
-  const steps: { run: () => Promise<void> }[] = [
-    { run: async () => { out.load = await tryGet('load', fetchLoadLatest) } },
-    { run: async () => { out.fuel = await tryGet('fuelMix', fetchFuelMix) } },
-    { run: async () => { out.loadHistory = (await tryGet('loadHistory', () => fetchLoadWindow(6))) ?? [] } },
-    { run: async () => { out.ercotRt = await tryGet('ercotRt', fetchERCOTLMPRealtime) } },
-    { run: async () => { out.ercotDa = (await tryGet('ercotDa', fetchERCOTLMPDayAhead)) ?? [] } },
-    { run: async () => { out.pjmRt = await tryGet('pjmRt', fetchPJMLMPRealtime) } },
-    { run: async () => { out.pjmDa = (await tryGet('pjmDa', fetchPJMLMPDayAhead)) ?? [] } },
+  const steps: Array<() => Promise<void>> = [
+    async () => { out.load = await tryGet('load', fetchLoadLatest) },
+    async () => { out.fuel = await tryGet('fuelMix', fetchFuelMix) },
+    async () => { out.loadHistory = (await tryGet('loadHistory', () => fetchLoadWindow(6))) ?? [] },
+    async () => { out.ercotRt = await tryGet('ercotRt', fetchERCOTLMPRealtime) },
+    async () => { out.ercotDa = (await tryGet('ercotDa', fetchERCOTLMPDayAhead)) ?? [] },
+    async () => { out.pjmRt = await tryGet('pjmRt', fetchPJMLMPRealtime) },
+    async () => { out.pjmDa = (await tryGet('pjmDa', fetchPJMLMPDayAhead)) ?? [] },
   ]
 
   for (let i = 0; i < steps.length; i++) {
-    await steps[i].run()
+    await steps[i]()
     if (i < steps.length - 1) await sleep(GRIDSTATUS_SPACING_MS)
   }
   return out
 }
 
-export async function GET() {
-  const [gs, weatherR] = await Promise.all([
+async function buildFreshSnapshot(): Promise<DashboardSnapshot> {
+  const [gs, weather] = await Promise.all([
     fetchGridStatusSerial(),
     tryGet<WeatherSnapshot>('weather', fetchWeather),
   ])
 
   const { load, fuel, loadHistory, ercotRt, ercotDa, pjmRt, pjmDa } = gs
-  const weather = weatherR
+  const realtime = load && fuel ? { ...load, ...fuel } : null
+  const partial = !realtime || !weather || !ercotRt || !pjmRt || loadHistory.length === 0
 
-  const realtime =
-    load && fuel ? { ...load, ...fuel } : null
-
-  const partial =
-    !realtime ||
-    !weather ||
-    !ercotRt ||
-    !pjmRt ||
-    loadHistory.length === 0
-
-  const body: DashboardSnapshot = {
+  return {
     realtime,
     pricing: {
       ercot: { realtime: ercotRt, day_ahead: ercotDa },
@@ -100,9 +87,53 @@ export async function GET() {
     load_history: loadHistory,
     fetched_at: new Date().toISOString(),
     partial,
+    rate_limited: false,
+    served_from_cache: false,
+  }
+}
+
+async function getSnapshot(): Promise<DashboardSnapshot> {
+  // Serve from cache if still fresh
+  if (cachedSnap && Date.now() < cachedSnap.expiresAt) {
+    return { ...cachedSnap.snap, served_from_cache: true }
   }
 
-  return Response.json(body, {
-    status: realtime || weather ? 200 : 502,
+  // Deduplicate concurrent requests — only one upstream fan-out at a time
+  if (inflightFetch) {
+    const snap = await inflightFetch
+    return { ...snap, served_from_cache: true }
+  }
+
+  inflightFetch = buildFreshSnapshot().finally(() => {
+    inflightFetch = null
   })
+
+  const snap = await inflightFetch
+  cachedSnap = { snap, expiresAt: Date.now() + CACHE_TTL_MS }
+  return snap
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────────
+export async function GET() {
+  try {
+    const snap = await getSnapshot()
+    return Response.json(snap, { status: snap.realtime || snap.weather ? 200 : 502 })
+  } catch (err) {
+    console.error('[api/grid] unhandled:', err)
+
+    // If we have stale cache, serve it with rate_limited flag rather than 502
+    if (cachedSnap) {
+      const stale: DashboardSnapshot = {
+        ...cachedSnap.snap,
+        rate_limited: true,
+        served_from_cache: true,
+      }
+      return Response.json(stale, { status: 200 })
+    }
+
+    return Response.json(
+      { error: 'upstream fetch failed', rate_limited: String(err).includes('429') } as unknown,
+      { status: 502 },
+    )
+  }
 }

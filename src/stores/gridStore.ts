@@ -14,6 +14,8 @@ import type {
   LMPRow,
   WeatherSnapshot,
 } from '@/lib/types'
+
+export type FetchStatus = 'loading' | 'live' | 'partial' | 'stale' | 'rate_limited' | 'error'
 import { getGridState } from '@/lib/formatters'
 import { SPARKLINE_POINTS, LOAD_HISTORY_POINTS } from '@/lib/constants'
 
@@ -46,6 +48,7 @@ interface GridStore {
   weather: WeatherSnapshot | null
   lastFetchedAt: number | null
   isError: boolean
+  fetchStatus: FetchStatus
 
   // Demo lifecycle
   demoMode: boolean
@@ -62,6 +65,7 @@ interface GridStore {
   setSnapshot: (snap: DashboardSnapshot) => void
   setFastLoad: (snap: FastLoadSnapshot) => void
   setIsError: (e: boolean) => void
+  setFetchStatus: (s: FetchStatus) => void
 
   startDemo: () => void
   stopDemo: () => void
@@ -116,6 +120,7 @@ export const useGridStore = create<GridStore>()((set, get) => ({
   weather: null,
   lastFetchedAt: null,
   isError: false,
+  fetchStatus: 'loading' as FetchStatus,
 
   demoMode: false,
   demoBackup: null,
@@ -194,6 +199,11 @@ export const useGridStore = create<GridStore>()((set, get) => ({
         metrics: baseMetrics,
         gridState: getGridState(baseMetrics.frequency, baseMetrics.forecastDeviation),
         isError: false,
+        fetchStatus: snap.rate_limited
+          ? 'rate_limited'
+          : snap.partial
+          ? 'partial'
+          : 'live',
       }
     }),
 
@@ -221,6 +231,7 @@ export const useGridStore = create<GridStore>()((set, get) => ({
     }),
 
   setIsError: (e) => set({ isError: e }),
+  setFetchStatus: (s) => set({ fetchStatus: s }),
 
   startDemo: () => {
     const s = get()
