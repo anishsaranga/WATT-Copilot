@@ -1,24 +1,15 @@
-const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+import type { DashboardSnapshot, FastLoadSnapshot } from '@/lib/types'
 
-export async function fetchGridMetrics() {
-  if (DEMO_MODE) return null
-  const res = await fetch('/api/grid/metrics')
-  if (!res.ok) throw new Error('Failed to fetch grid metrics')
-  return res.json()
+export async function fetchDashboardSnapshot(signal?: AbortSignal): Promise<DashboardSnapshot> {
+  const res = await fetch('/api/grid', { signal, cache: 'no-store' })
+  if (!res.ok) throw new Error(`/api/grid → ${res.status}`)
+  return (await res.json()) as DashboardSnapshot
 }
 
-export async function fetchAlarms() {
-  if (DEMO_MODE) return null
-  const res = await fetch('/api/grid/alarms')
-  if (!res.ok) throw new Error('Failed to fetch alarms')
-  return res.json()
-}
-
-export async function fetchIncidents() {
-  if (DEMO_MODE) return null
-  const res = await fetch('/api/incidents')
-  if (!res.ok) throw new Error('Failed to fetch incidents')
-  return res.json()
+export async function fetchFastLoad(signal?: AbortSignal): Promise<FastLoadSnapshot> {
+  const res = await fetch('/api/grid/load', { signal, cache: 'no-store' })
+  if (!res.ok) throw new Error(`/api/grid/load → ${res.status}`)
+  return (await res.json()) as FastLoadSnapshot
 }
 
 export async function generateHandoffBrief(shiftData: unknown) {
@@ -29,11 +20,4 @@ export async function generateHandoffBrief(shiftData: unknown) {
   })
   if (!res.ok) throw new Error('Failed to generate handoff brief')
   return res.blob()
-}
-
-export function createSSEConnection(url: string, onMessage: (data: string) => void) {
-  if (DEMO_MODE) return null
-  const es = new EventSource(url)
-  es.onmessage = (e) => onMessage(e.data)
-  return es
 }

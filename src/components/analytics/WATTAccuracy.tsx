@@ -10,6 +10,7 @@ const DATA = [
 
 function CenterLabel({ viewBox }: any) {
   const { cx, cy } = viewBox ?? {}
+  if (cx == null || cy == null || isNaN(cx) || isNaN(cy)) return null
   return (
     <g>
       <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle"

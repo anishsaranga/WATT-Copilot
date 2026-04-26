@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
 import StatusRail from './StatusRail'
 import MetricsStrip from '@/components/top-bar/MetricsStrip'
 import PanelLayout from './PanelLayout'
 import BottomStrip from '@/components/bottom-strip/BottomStrip'
-import { useGridData } from '@/hooks/useGridData'
+import { useGridDashboard } from '@/hooks/useGridDashboard'
 import { Monitor } from 'lucide-react'
 
 function MobileGate() {
@@ -23,7 +22,7 @@ function MobileGate() {
 }
 
 export default function AppShell() {
-  useGridData()
+  useGridDashboard()
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)]">

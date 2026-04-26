@@ -1,7 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
-import { motion } from 'motion/react'
+import { useMemo, useState, useEffect } from 'react'
 import { useGridStore } from '@/stores/gridStore'
 import { getFrequencyZone } from '@/lib/formatters'
 import {
@@ -58,8 +57,25 @@ const ZONE_ARCS = [
 const TICK_VALUES = [59.85, 59.9, 59.95, 60.0, 60.05, 60.1, 60.15]
 
 export default function FrequencyGauge() {
-  const frequency = useGridStore((s) => s.metrics.frequency)
-  const safeFreq = isNaN(frequency) ? 60.0 : frequency
+  const demoMode = useGridStore((s) => s.demoMode)
+  const storeFrequency = useGridStore((s) => s.metrics.frequency)
+
+  // In live mode: gentle ±0.035 Hz nominal oscillation (20-second period).
+  // Stays entirely within green zone (59.965–60.035 Hz). No API source exists
+  // for ERCOT frequency — this keeps the gauge alive without fabricating data.
+  const [nominalFreq, setNominalFreq] = useState(60.0)
+  useEffect(() => {
+    if (demoMode) return
+    let t = 0
+    const id = setInterval(() => {
+      t += 0.2 // 200ms tick → full 20s period at 2π/100 steps
+      setNominalFreq(60.0 + 0.035 * Math.sin((t * 2 * Math.PI) / 100))
+    }, 200)
+    return () => clearInterval(id)
+  }, [demoMode])
+
+  const rawFreq = demoMode ? storeFrequency : nominalFreq
+  const safeFreq = isNaN(rawFreq) ? 60.0 : rawFreq
   const zone = getFrequencyZone(safeFreq)
 
   const zoneColor = zone === 'nominal'
@@ -69,8 +85,6 @@ export default function FrequencyGauge() {
     : 'var(--accent-red)'
 
   const needleDeg = hzToDeg(Math.max(FREQUENCY_DISPLAY_MIN, Math.min(FREQUENCY_DISPLAY_MAX, safeFreq)))
-  const needleTip = polarXY(CX, CY, R_INNER - 4, needleDeg)
-
   const deviation = safeFreq - 60.0
   const devText = `Δ ${deviation >= 0 ? '+' : ''}${deviation.toFixed(3)} Hz`
 
@@ -83,7 +97,7 @@ export default function FrequencyGauge() {
   )
 
   return (
-    <div className="flex flex-col items-center w-full">
+    <div className="flex flex-col items-center w-full gap-0.5">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full max-w-[280px]"
@@ -120,10 +134,13 @@ export default function FrequencyGauge() {
         })}
 
         {/* Needle */}
-        <motion.g
-          animate={{ rotate: needleDeg - (-90) }}
-          style={{ transformOrigin: `${CX}px ${CY}px` }}
-          transition={{ type: 'spring', stiffness: 100, damping: 18 }}
+        <g
+          style={{
+            transform: `rotate(${needleDeg + 90}deg)`,
+            transformOrigin: `${CX}px ${CY}px`,
+            transformBox: 'view-box',
+            transition: 'transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
         >
           <line
             x1={CX} y1={CY + 10}
@@ -132,7 +149,7 @@ export default function FrequencyGauge() {
             strokeWidth={2}
             strokeLinecap="round"
           />
-        </motion.g>
+        </g>
 
         {/* Center hub */}
         <circle cx={CX} cy={CY} r={7} fill="var(--bg-primary)" stroke={zoneColor} strokeWidth={1.5} />
@@ -150,7 +167,7 @@ export default function FrequencyGauge() {
           {safeFreq.toFixed(2)} Hz
         </text>
         <text
-          x={CX} y={CY - 8}
+          x={CX} y={CY - 6}
           textAnchor="middle"
           fontSize={10}
           fill="var(--text-muted)"
@@ -159,6 +176,14 @@ export default function FrequencyGauge() {
           {devText}
         </text>
       </svg>
+      {!demoMode && (
+        <p
+          className="font-mono text-[9px] text-center leading-none opacity-40"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          NOMINAL · NO LIVE FEED
+        </p>
+      )}
     </div>
   )
 }

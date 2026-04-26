@@ -7,89 +7,95 @@ import WeatherOverlay from './WeatherOverlay'
 import LoadCurve from './LoadCurve'
 import FrequencyGauge from './FrequencyGauge'
 import RegionalTreemap from './RegionalTreemap'
+import { useGridStore } from '@/stores/gridStore'
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.06 } },
-}
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-}
+// Outer layout uses flex-col + proportional flex-grow so each row gets a
+// definite height regardless of the ancestor chain (react-resizable-panels
+// uses flex internally; CSS Grid fr units require a definite container height
+// which can fail to resolve through nested flex items).
+//
+// Row proportions: 35 / 20 / 45 → same visual split as before.
 
 export default function GridMonitorTab() {
+  const demoMode = useGridStore((s) => s.demoMode)
+  const showAlarms = demoMode
+
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="h-full overflow-auto p-3 grid gap-3"
-      style={{
-        gridTemplateRows: 'minmax(200px, 0.35fr) minmax(120px, 0.2fr) minmax(150px, 0.45fr)',
-        gridTemplateColumns: '1fr 1fr',
-      }}
-    >
-      {/* Row 1: Frequency Gauge + Load Curve */}
-      <motion.div variants={itemVariants}>
-        <GlassCard className="h-full flex flex-col" noPadding>
-          <div className="px-3 pt-2.5 pb-1 border-b border-[var(--border-subtle)]">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-              Frequency
-            </span>
-          </div>
-          <div className="flex-1 flex items-center justify-center p-2 min-h-0">
-            <FrequencyGauge />
-          </div>
-        </GlassCard>
-      </motion.div>
+    <div className="h-full flex flex-col overflow-hidden p-3 gap-3">
 
-      <motion.div variants={itemVariants}>
-        <GlassCard className="h-full flex flex-col" noPadding>
-          <div className="px-3 pt-2.5 pb-1 border-b border-[var(--border-subtle)]">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-              Load Curve (6hr)
-            </span>
-          </div>
-          <div className="flex-1 min-h-0" style={{ minHeight: 120 }}>
-            <LoadCurve />
-          </div>
-        </GlassCard>
-      </motion.div>
+      {/* ── Row 1 (33%): Frequency gauge + Load curve ── */}
+      <div className="flex gap-3 overflow-hidden" style={{ flex: '33 1 0%' }}>
 
-      {/* Row 2: Regional Treemap — full width */}
-      <motion.div variants={itemVariants} style={{ gridColumn: '1 / -1' }}>
+        {/* Frequency gauge */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <GlassCard className="h-full flex flex-col" noPadding>
+            <div className="px-3 pt-2.5 pb-1 flex-shrink-0 border-b border-[var(--border-subtle)]">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                {demoMode ? 'Frequency · Incident Sim' : 'Frequency · ERCOT'}
+              </span>
+            </div>
+            <div className="flex-1 flex items-center justify-center p-2 overflow-hidden">
+              <FrequencyGauge />
+            </div>
+          </GlassCard>
+        </div>
+
+        {/* Load curve */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <GlassCard className="h-full flex flex-col" noPadding>
+            <div className="px-3 pt-2.5 pb-1 flex-shrink-0 border-b border-[var(--border-subtle)]">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                ERCOT Load Curve (6hr)
+              </span>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <LoadCurve />
+            </div>
+          </GlassCard>
+        </div>
+
+      </div>
+
+      {/* ── Row 2 (22%): Regional LMP ── */}
+      <div className="overflow-hidden" style={{ flex: '28 1 0%' }}>
         <GlassCard className="h-full flex flex-col" noPadding>
-          <div className="px-3 pt-2.5 pb-1 border-b border-[var(--border-subtle)]">
+          <div className="px-3 pt-2.5 pb-1 flex-shrink-0 border-b border-[var(--border-subtle)]">
             <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-              Regional Load Distribution
+              ERCOT / PJM Realtime LMP
             </span>
           </div>
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 overflow-hidden">
             <RegionalTreemap />
           </div>
         </GlassCard>
-      </motion.div>
+      </div>
 
-      {/* Row 3: Alarm Feed + Weather Overlay */}
-      <motion.div variants={itemVariants}>
-        <GlassCard className="h-full" noPadding>
-          <AlarmFeed />
-        </GlassCard>
-      </motion.div>
+      {/* ── Row 3 (45%): Weather overlay (+ Alarm feed in demo mode) ── */}
+      <div className="flex gap-3 overflow-hidden min-h-0" style={{ flex: '39 1 0%' }}>
 
-      <motion.div variants={itemVariants}>
-        <GlassCard className="h-full flex flex-col" noPadding>
-          <div className="px-3 pt-2.5 pb-1 border-b border-[var(--border-subtle)]">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-              Weather Overview
-            </span>
+        {showAlarms && (
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <GlassCard className="h-full overflow-hidden" noPadding>
+              <AlarmFeed />
+            </GlassCard>
           </div>
-          <div className="flex-1 min-h-0">
-            <WeatherOverlay />
-          </div>
-        </GlassCard>
-      </motion.div>
-    </motion.div>
+        )}
+
+        <div className="min-w-0 min-h-0 overflow-hidden" style={{ flex: showAlarms ? '1 1 0%' : '1 1 100%' }}>
+          <GlassCard className="h-full flex flex-col" noPadding>
+            <div className="px-3 pt-2.5 pb-1 flex-shrink-0 border-b border-[var(--border-subtle)]">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                Weather (Austin · ERCOT)
+              </span>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <WeatherOverlay />
+            </div>
+          </GlassCard>
+        </div>
+
+      </div>
+
+    </div>
   )
 }

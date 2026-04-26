@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { useGridStore } from '@/stores/gridStore'
 import MetricChip from './MetricChip'
 import ThemeToggle from '@/components/shared/ThemeToggle'
+import DataStatusChip from '@/components/shared/DataStatusChip'
 import {
   formatFrequency, formatMW, formatDeviation,
   getFrequencyZone,
@@ -17,6 +18,7 @@ export default function MetricsStrip() {
   const loadSparkline = useGridStore((s) => s.loadSparkline)
   const dcLoadSparkline = useGridStore((s) => s.dcLoadSparkline)
   const gridState = useGridStore((s) => s.gridState)
+  const demoMode = useGridStore((s) => s.demoMode)
 
   const freqZone = getFrequencyZone(metrics.frequency)
   const freqColor = freqZone === 'nominal'
@@ -75,48 +77,60 @@ export default function MetricsStrip() {
       style={bgStyle}
       aria-label="Live grid metrics"
     >
-      <MetricChip
-        label="FREQ"
-        value={formatFrequency(metrics.frequency)}
-        color={freqColor}
-        sparklineData={frequencyHistory}
-        trend={freqTrend}
-        trendColor={freqColor}
-        pulse
-        aria-label={`Grid frequency: ${formatFrequency(metrics.frequency)}, deviation ${freqDeviation > 0 ? '+' : ''}${freqDeviation.toFixed(4)} Hz`}
-      />
+      {/* LIVE_MODE_HIDDEN — frequency has no live API source. Bring back when available. */}
+      {demoMode && (
+        <MetricChip
+          label="FREQ"
+          value={formatFrequency(metrics.frequency)}
+          color={freqColor}
+          sparklineData={frequencyHistory}
+          trend={freqTrend}
+          trendColor={freqColor}
+          pulse
+          aria-label={`Grid frequency: ${formatFrequency(metrics.frequency)}, deviation ${freqDeviation > 0 ? '+' : ''}${freqDeviation.toFixed(4)} Hz`}
+        />
+      )}
 
       <MetricChip
         label="LOAD"
-        value={formatMW(Math.round(metrics.load))}
+        value={metrics.load > 0 ? formatMW(Math.round(metrics.load)) : '—'}
         color="var(--accent-cyan)"
         sparklineData={loadSparkline}
         trend={loadTrend}
       />
 
-      <MetricChip
-        label="Δ FORECAST"
-        value={formatDeviation(metrics.forecastDeviation)}
-        color={forecastColor}
-        trend={metrics.forecastDeviation > 0 ? 'up' : 'down'}
-        trendColor={forecastColor}
-      />
+      {/* LIVE_MODE_HIDDEN — load forecast deviation has no live API source. */}
+      {demoMode && (
+        <MetricChip
+          label="Δ FORECAST"
+          value={formatDeviation(metrics.forecastDeviation)}
+          color={forecastColor}
+          trend={metrics.forecastDeviation > 0 ? 'up' : 'down'}
+          trendColor={forecastColor}
+        />
+      )}
 
-      <MetricChip
-        label="ALARMS"
-        value={String(metrics.alarmCount)}
-        color={metrics.alarmCount > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'}
-        badge={metrics.alarmCount}
-        trend="stable"
-      />
+      {/* LIVE_MODE_HIDDEN — alarm feed has no live API source. */}
+      {demoMode && (
+        <MetricChip
+          label="ALARMS"
+          value={String(metrics.alarmCount)}
+          color={metrics.alarmCount > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'}
+          badge={metrics.alarmCount}
+          trend="stable"
+        />
+      )}
 
-      <MetricChip
-        label="DC LOAD"
-        value={formatMW(Math.round(metrics.dcLoad))}
-        color={dcLoadColor}
-        sparklineData={dcLoadSparkline}
-        trend="stable"
-      />
+      {/* LIVE_MODE_HIDDEN — DC load has no live API source. */}
+      {demoMode && (
+        <MetricChip
+          label="DC LOAD"
+          value={formatMW(Math.round(metrics.dcLoad))}
+          color={dcLoadColor}
+          sparklineData={dcLoadSparkline}
+          trend="stable"
+        />
+      )}
 
       <MetricChip
         label="SHIFT"
@@ -126,7 +140,8 @@ export default function MetricsStrip() {
       />
 
       <div className="flex-1" />
-      <div className="flex items-center px-3 border-l border-[var(--border-subtle)]">
+      <div className="flex items-center gap-3 px-3 border-l border-[var(--border-subtle)]">
+        <DataStatusChip />
         <ThemeToggle />
       </div>
     </div>

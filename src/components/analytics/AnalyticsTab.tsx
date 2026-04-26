@@ -5,6 +5,7 @@ import { motion } from 'motion/react'
 import GlassCard from '@/components/shared/GlassCard'
 import GridHealthScore from './GridHealthScore'
 import WATTAccuracy from './WATTAccuracy'
+import { useGridStore } from '@/stores/gridStore'
 import ResponseTime from './ResponseTime'
 import IncidentFrequency from './IncidentFrequency'
 import DecisionSummary from './DecisionSummary'
@@ -23,6 +24,8 @@ const itemVariants = {
 
 export default function AnalyticsTab() {
   const [range, setRange] = useState<string>('7d')
+  // LIVE_MODE_HIDDEN — Grid Health Score has no live API source.
+  const demoMode = useGridStore((s) => s.demoMode)
 
   return (
     <motion.div
@@ -49,16 +52,22 @@ export default function AnalyticsTab() {
         ))}
       </motion.div>
 
-      {/* Row 1: Health Score + WATT Accuracy */}
-      <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3" style={{ height: 200 }}>
-        <GlassCard className="flex flex-col" noPadding>
-          <div className="px-3 pt-2.5 pb-1 border-b border-[var(--border-subtle)]">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">Grid Health</span>
-          </div>
-          <div className="flex-1 flex items-center justify-center">
-            <GridHealthScore />
-          </div>
-        </GlassCard>
+      {/* Row 1: Health Score (demo-only) + WATT Accuracy */}
+      <motion.div
+        variants={itemVariants}
+        className={demoMode ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-1 gap-3'}
+        style={{ height: 200 }}
+      >
+        {demoMode && (
+          <GlassCard className="flex flex-col" noPadding>
+            <div className="px-3 pt-2.5 pb-1 border-b border-[var(--border-subtle)]">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">Grid Health · Demo</span>
+            </div>
+            <div className="flex-1 flex items-center justify-center">
+              <GridHealthScore />
+            </div>
+          </GlassCard>
+        )}
         <GlassCard className="flex flex-col" noPadding>
           <div className="px-3 pt-2.5 pb-1 border-b border-[var(--border-subtle)]">
             <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">WATT Accuracy</span>

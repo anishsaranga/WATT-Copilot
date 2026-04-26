@@ -6,7 +6,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Slider } from '@/components/ui/slider'
 import StatusDot from '@/components/shared/StatusDot'
 import { useUIStore } from '@/stores/uiStore'
-import { useCopilotStore } from '@/stores/copilotStore'
+import { useGridStore } from '@/stores/gridStore'
 
 function Section({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={`space-y-3 py-2 ${className ?? ''}`}>{children}</div>
@@ -49,7 +49,9 @@ function ApiStatus({ name, connected = true, lastSync = '2 min ago', docCount }:
 
 export default function SettingsTab() {
   const { wattConfidenceThreshold, setWattConfidenceThreshold, theme, setTheme, chartAnimationsEnabled, setChartAnimationsEnabled } = useUIStore()
-  const runDemoScenario = useCopilotStore((s) => s.runDemoScenario)
+  const demoMode = useGridStore((s) => s.demoMode)
+  const startDemo = useGridStore((s) => s.startDemo)
+  const stopDemo = useGridStore((s) => s.stopDemo)
   const [freqThreshold, setFreqThreshold] = useState([0.05])
   const [loadThreshold, setLoadThreshold] = useState([5])
 
@@ -101,13 +103,17 @@ export default function SettingsTab() {
                   </div>
                 </SettingRow>
 
-                <SettingRow label="Run July 10 2024 demo">
+                <SettingRow label="Looping incident simulation">
                   <button
-                    onClick={runDemoScenario}
+                    onClick={() => (demoMode ? stopDemo() : startDemo())}
                     className="font-mono text-[11px] px-3 py-1.5 rounded font-semibold transition-all hover:opacity-90"
-                    style={{ background: 'linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan))', color: 'var(--bg-primary)' }}
+                    style={
+                      demoMode
+                        ? { background: 'var(--accent-red)', color: 'var(--bg-primary)' }
+                        : { background: 'linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan))', color: 'var(--bg-primary)' }
+                    }
                   >
-                    Run Demo
+                    {demoMode ? 'Stop Demo' : 'Run Demo'}
                   </button>
                 </SettingRow>
               </Section>
@@ -156,13 +162,13 @@ export default function SettingsTab() {
             </AccordionTrigger>
             <AccordionContent>
               <Section>
-                <ApiStatus name="CAISO API" connected lastSync="12s ago" />
-                <ApiStatus name="EIA API" connected lastSync="1m ago" />
-                <ApiStatus name="NOAA API" connected lastSync="5m ago" />
-                <ApiStatus name="ChromaDB" connected lastSync="8s ago" docCount={2847} />
+                <ApiStatus name="GridStatus.io · ercot_load" connected lastSync="30s poll" />
+                <ApiStatus name="GridStatus.io · ercot_fuel_mix" connected lastSync="5m poll" />
+                <ApiStatus name="GridStatus.io · ercot/pjm LMP" connected lastSync="5m poll" />
+                <ApiStatus name="Open-Meteo · weather (ERCOT)" connected lastSync="30m cache" />
                 <div className="mt-2 p-2 rounded bg-[var(--accent-cyan-dim)] border border-[rgba(0,240,255,0.15)]">
                   <span className="font-mono text-[10px] text-[var(--accent-cyan)]">
-                    NEXT_PUBLIC_DEMO_MODE=true — using simulated data
+                    GRIDSTATUS_API_KEY required in .env.local — see references/README.md
                   </span>
                 </div>
               </Section>
