@@ -21,7 +21,8 @@ export function useGridData() {
       tickCountRef.current++
       const now = Date.now()
 
-      const frequency = generateNextFrequency()
+      const raw = generateNextFrequency()
+      const frequency = isNaN(raw) ? 60.0 : raw
       const loadBase = 41000 + Math.sin(tickCountRef.current * 0.001) * 3000
       const load = Math.max(35000, Math.min(48000, loadBase + (Math.random() - 0.5) * 200))
       const forecastLoad = load + (Math.random() - 0.5) * 800

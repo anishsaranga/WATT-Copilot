@@ -54,7 +54,7 @@ export default function GridMonitorTab() {
               Load Curve (6hr)
             </span>
           </div>
-          <div className="flex-1 p-2 min-h-0">
+          <div className="flex-1 min-h-0" style={{ minHeight: 120 }}>
             <LoadCurve />
           </div>
         </GlassCard>

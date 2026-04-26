@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { useGridStore } from '@/stores/gridStore'
 import MetricChip from './MetricChip'
@@ -49,10 +49,17 @@ export default function MetricsStrip() {
     ? 'var(--accent-amber)'
     : 'var(--text-secondary)'
 
-  const shiftTime = useMemo(() => {
-    const h = new Date().getHours()
-    const shiftLabel = h >= 22 || h < 6 ? 'Night Shift' : h < 14 ? 'Day Shift' : 'Evening Shift'
-    return `${format(new Date(), 'hh:mm:ss a')} · ${shiftLabel}`
+  const [shiftTime, setShiftTime] = useState('--:--:-- -- · --')
+  useEffect(() => {
+    const update = () => {
+      const now = new Date()
+      const h = now.getHours()
+      const shiftLabel = h >= 22 || h < 6 ? 'Night Shift' : h < 14 ? 'Day Shift' : 'Evening Shift'
+      setShiftTime(`${format(now, 'hh:mm:ss a')} · ${shiftLabel}`)
+    }
+    update()
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
   }, [])
 
   const bgStyle = gridState === 'nominal'

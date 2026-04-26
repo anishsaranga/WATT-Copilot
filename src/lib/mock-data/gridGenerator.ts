@@ -26,7 +26,9 @@ export function generateNextFrequency(): number {
   perturbationTimer++
   const base = 60.0 + Math.sin(frequencyPhase * 0.1) * 0.003
   const noise = gaussianNoise(0.0015)
-  const pert = perturbationValue * Math.sin((perturbationTimer / perturbationDuration) * Math.PI)
+  const pert = perturbationDuration > 0
+    ? perturbationValue * Math.sin((perturbationTimer / perturbationDuration) * Math.PI)
+    : 0
 
   return Math.max(59.80, Math.min(60.20, base + noise + pert))
 }

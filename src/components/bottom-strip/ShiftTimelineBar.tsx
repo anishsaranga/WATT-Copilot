@@ -65,14 +65,19 @@ export default function ShiftTimelineBar() {
                   style={{ left, transform: 'translateX(-50%)' }}
                 >
                   <Tooltip>
-                    <TooltipTrigger>
-                      <button
-                        className="w-2 h-2 rounded-full flex-shrink-0 cursor-pointer hover:scale-150 transition-transform"
-                        style={{ backgroundColor: color }}
-                        onClick={() => setActiveTab('shift-log')}
-                        aria-label={event.title}
-                      />
-                    </TooltipTrigger>
+                    <TooltipTrigger
+                      render={
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className="w-2 h-2 rounded-full flex-shrink-0 cursor-pointer hover:scale-150 transition-transform"
+                          style={{ backgroundColor: color }}
+                          onClick={() => setActiveTab('shift-log')}
+                          onKeyDown={(e) => e.key === 'Enter' && setActiveTab('shift-log')}
+                          aria-label={event.title}
+                        />
+                      }
+                    />
                     <TooltipContent
                       side="top"
                       className="text-xs max-w-[200px] bg-[var(--bg-elevated)] border-[var(--border-default)]"

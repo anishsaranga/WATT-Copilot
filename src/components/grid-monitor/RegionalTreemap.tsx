@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import * as d3 from 'd3'
 import { motion } from 'motion/react'
 import { useGridStore } from '@/stores/gridStore'
@@ -10,12 +10,29 @@ export default function RegionalTreemap() {
   const selectedRegion = useGridStore((s) => s.selectedRegion)
   const setSelectedRegion = useGridStore((s) => s.setSelectedRegion)
 
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [dims, setDims] = useState({ w: 400, h: 180 })
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect
+      if (width > 0 && height > 0) setDims({ w: Math.floor(width), h: Math.floor(height) })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const colorScale = useMemo(() =>
-    d3.scaleSequential(d3.interpolateRgb('#1A2233', '#00F0FF')).domain([0, 1]),
+    d3.scaleSequential(d3.interpolateRgb('#1A2233', '#00A8C8')).domain([0, 1]),
     []
   )
 
-  const treemapData = useMemo(() => {
+  const leaves = useMemo(() => {
+    const { w, h } = dims
+    if (w < 10 || h < 10) return []
+
     const data = {
       name: 'root',
       children: BALANCING_AUTHORITIES.map((ba) => ({
@@ -25,68 +42,74 @@ export default function RegionalTreemap() {
       })),
     }
     const root = d3.hierarchy(data).sum((d: any) => d.value ?? 0)
-    d3.treemap<typeof data>().size([100, 100]).padding(1)(root)
+    d3.treemap<typeof data>()
+      .size([w, h])
+      .paddingInner(3)
+      .paddingOuter(2)
+      (root)
     return root.leaves()
-  }, [])
+  }, [dims])
 
   return (
-    <div className="w-full h-full relative" aria-label="Regional load treemap">
-      <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="none">
-        {treemapData.map((leaf) => {
+    <div ref={containerRef} className="w-full h-full" aria-label="Regional load treemap">
+      <svg width={dims.w} height={dims.h} style={{ display: 'block' }}>
+        {leaves.map((leaf) => {
           const d = leaf.data as any
+          const x0 = (leaf as any).x0
+          const y0 = (leaf as any).y0
+          const x1 = (leaf as any).x1
+          const y1 = (leaf as any).y1
+          const w = x1 - x0
+          const h = y1 - y0
+          if (w <= 0 || h <= 0) return null
+
           const isSelected = selectedRegion === d.id
-          const ratio = d.ratio ?? 0
-          const color = colorScale(ratio)
-          const w = (leaf as any).x1 - (leaf as any).x0
-          const h = (leaf as any).y1 - (leaf as any).y0
+          const color = colorScale(d.ratio ?? 0)
 
           return (
-            <g key={d.id}>
-              <motion.rect
-                x={(leaf as any).x0}
-                y={(leaf as any).y0}
-                width={w}
-                height={h}
+            <motion.g
+              key={d.id}
+              whileHover={{ opacity: 0.85 }}
+              style={{ cursor: 'pointer' }}
+              onClick={() => setSelectedRegion(isSelected ? null : d.id)}
+              role="button"
+              aria-label={`${d.name}: ${Math.round(d.currentLoad).toLocaleString()} MW`}
+            >
+              <rect
+                x={x0} y={y0} width={w} height={h}
                 fill={color}
-                stroke={isSelected ? '#00F0FF' : 'rgba(255,255,255,0.06)'}
-                strokeWidth={isSelected ? 0.5 : 0.3}
-                style={{ cursor: 'pointer' }}
-                onClick={() => setSelectedRegion(isSelected ? null : d.id)}
-                whileHover={{ opacity: 0.85 }}
-                role="button"
-                aria-label={`${d.name}: ${Math.round(d.currentLoad).toLocaleString()} MW`}
+                stroke={isSelected ? '#00F0FF' : 'rgba(10,14,23,0.6)'}
+                strokeWidth={isSelected ? 1.5 : 1}
+                rx={2}
               />
-              {w > 12 && h > 8 && (
-                <>
-                  <text
-                    x={(leaf as any).x0 + w / 2}
-                    y={(leaf as any).y0 + h / 2 - 2}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={Math.min(w / 5, h / 3, 4)}
-                    fill="rgba(255,255,255,0.9)"
-                    fontFamily="JetBrains Mono"
-                    fontWeight="600"
-                    style={{ pointerEvents: 'none' }}
-                  >
-                    {d.shortName}
-                  </text>
-                  {h > 12 && (
-                    <text
-                      x={(leaf as any).x0 + w / 2}
-                      y={(leaf as any).y0 + h / 2 + 3.5}
-                      textAnchor="middle"
-                      fontSize={Math.min(w / 7, 3)}
-                      fill="rgba(255,255,255,0.5)"
-                      fontFamily="JetBrains Mono"
-                      style={{ pointerEvents: 'none' }}
-                    >
-                      {(d.currentLoad / 1000).toFixed(0)}k MW
-                    </text>
-                  )}
-                </>
+              {w > 40 && h > 22 && (
+                <text
+                  x={x0 + w / 2} y={y0 + h / 2 - (h > 36 ? 7 : 0)}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={Math.min(w / 4.5, h / 2.5, 13)}
+                  fill="rgba(255,255,255,0.92)"
+                  fontFamily="JetBrains Mono"
+                  fontWeight="600"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {d.shortName}
+                </text>
               )}
-            </g>
+              {w > 40 && h > 36 && (
+                <text
+                  x={x0 + w / 2} y={y0 + h / 2 + 9}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={Math.min(w / 7, h / 4, 10)}
+                  fill="rgba(255,255,255,0.5)"
+                  fontFamily="JetBrains Mono"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {(d.currentLoad / 1000).toFixed(0)}k MW
+                </text>
+              )}
+            </motion.g>
           )
         })}
       </svg>

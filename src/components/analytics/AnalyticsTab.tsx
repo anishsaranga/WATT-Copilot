@@ -52,7 +52,7 @@ export default function AnalyticsTab() {
       </motion.div>
 
       {/* Row 1: Health Score + WATT Accuracy */}
-      <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3" style={{ height: 180 }}>
+      <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3" style={{ height: 200 }}>
         <GlassCard className="flex flex-col" noPadding>
           <div className="px-3 pt-2.5 pb-1 border-b border-[var(--border-subtle)]">
             <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">Grid Health</span>
@@ -65,9 +65,7 @@ export default function AnalyticsTab() {
           <div className="px-3 pt-2.5 pb-1 border-b border-[var(--border-subtle)]">
             <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">WATT Accuracy</span>
           </div>
-          <div className="flex-1">
-            <WATTAccuracy />
-          </div>
+          <WATTAccuracy />
         </GlassCard>
       </motion.div>
 
@@ -79,7 +77,7 @@ export default function AnalyticsTab() {
               Response Time — Alarm → Action (minutes)
             </span>
           </div>
-          <div className="flex-1 p-2">
+          <div style={{ height: 130 }}>
             <ResponseTime />
           </div>
         </GlassCard>
@@ -91,7 +89,7 @@ export default function AnalyticsTab() {
           <div className="px-3 pt-2.5 pb-1 border-b border-[var(--border-subtle)]">
             <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">Incident Frequency by Type</span>
           </div>
-          <div className="flex-1 p-2">
+          <div style={{ height: 150 }}>
             <IncidentFrequency />
           </div>
         </GlassCard>

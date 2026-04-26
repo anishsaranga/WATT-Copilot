@@ -1,28 +1,52 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { useIncidentStore } from '@/stores/incidentStore'
 import SeverityBadge from '@/components/shared/SeverityBadge'
 import IncidentDetail from './IncidentDetail'
 import { formatDate, formatDuration } from '@/lib/formatters'
-import type { Incident } from '@/lib/types'
 
 type SortKey = 'date' | 'severity' | 'loadImpact' | 'duration'
 type SortDir = 'asc' | 'desc'
 
 const SEVERITY_ORDER = { critical: 0, major: 1, minor: 2, info: 3 }
 
+const STATUS_COLORS: Record<string, string> = {
+  active: 'var(--accent-red)',
+  under_review: 'var(--accent-amber)',
+  resolved: 'var(--accent-green)',
+}
+
 export default function IncidentTable() {
-  const incidents = useIncidentStore((s) => s.getFilteredIncidents())
+  // Read raw data + filters from store separately — never call functions inside selectors
+  const allIncidents = useIncidentStore((s) => s.incidents)
+  const filters = useIncidentStore((s) => s.filters)
   const selectedId = useIncidentStore((s) => s.selectedIncidentId)
   const setSelectedIncident = useIncidentStore((s) => s.setSelectedIncident)
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'date', dir: 'desc' })
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 15
 
-  const sorted = [...incidents].sort((a, b) => {
+  // Filter inline — result is stable because inputs are stable references
+  const filtered = allIncidents.filter((inc) => {
+    if (filters.search) {
+      const q = filters.search.toLowerCase()
+      if (
+        !inc.narrative.toLowerCase().includes(q) &&
+        !inc.region.toLowerCase().includes(q) &&
+        !inc.type.toLowerCase().includes(q) &&
+        !(inc.nercId?.toLowerCase().includes(q))
+      ) return false
+    }
+    if (filters.severity && inc.severity !== filters.severity) return false
+    if (filters.type && inc.type !== filters.type) return false
+    if (filters.region && inc.region !== filters.region) return false
+    return true
+  })
+
+  const sorted = [...filtered].sort((a, b) => {
     let cmp = 0
     if (sort.key === 'date') cmp = a.date - b.date
     else if (sort.key === 'severity') cmp = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
@@ -41,12 +65,6 @@ export default function IncidentTable() {
   const SortIcon = ({ col }: { col: SortKey }) => {
     if (sort.key !== col) return <ChevronsUpDown className="w-3 h-3 opacity-30" />
     return sort.dir === 'asc' ? <ChevronUp className="w-3 h-3 text-[var(--accent-cyan)]" /> : <ChevronDown className="w-3 h-3 text-[var(--accent-cyan)]" />
-  }
-
-  const STATUS_COLORS: Record<string, string> = {
-    active: 'var(--accent-red)',
-    under_review: 'var(--accent-amber)',
-    resolved: 'var(--accent-green)',
   }
 
   return (
@@ -80,9 +98,8 @@ export default function IncidentTable() {
           </thead>
           <tbody>
             {paged.map((incident, idx) => (
-              <>
+              <Fragment key={incident.id}>
                 <motion.tr
-                  key={incident.id}
                   initial={{ opacity: 0, x: -4 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: idx * 0.03, duration: 0.2 }}
@@ -123,20 +140,19 @@ export default function IncidentTable() {
                 </motion.tr>
                 <AnimatePresence>
                   {selectedId === incident.id && (
-                    <tr key={`detail-${incident.id}`}>
+                    <tr>
                       <td colSpan={8} className="p-0">
                         <IncidentDetail />
                       </td>
                     </tr>
                   )}
                 </AnimatePresence>
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-3 py-2 border-t border-[var(--border-subtle)] flex-shrink-0">
           <span className="font-mono text-[11px] text-[var(--text-muted)]">
