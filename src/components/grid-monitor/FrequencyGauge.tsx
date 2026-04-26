@@ -98,7 +98,7 @@ export default function FrequencyGauge() {
   )
 
   return (
-    <div className="flex flex-col items-center w-full">
+    <div className="flex flex-col items-center w-full gap-0.5">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full max-w-[280px]"
@@ -165,7 +165,7 @@ export default function FrequencyGauge() {
           {safeFreq.toFixed(2)} Hz
         </text>
         <text
-          x={CX} y={CY - 8}
+          x={CX} y={CY - 6}
           textAnchor="middle"
           fontSize={10}
           fill="var(--text-muted)"
@@ -173,19 +173,15 @@ export default function FrequencyGauge() {
         >
           {devText}
         </text>
-        {!demoMode && (
-          <text
-            x={CX} y={CY + 6}
-            textAnchor="middle"
-            fontSize={7}
-            fill="var(--text-muted)"
-            fontFamily="IBM Plex Mono, monospace"
-            opacity={0.5}
-          >
-            NOMINAL · NO LIVE FEED
-          </text>
-        )}
       </svg>
+      {!demoMode && (
+        <p
+          className="font-mono text-[9px] text-center leading-none opacity-40"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          NOMINAL · NO LIVE FEED
+        </p>
+      )}
     </div>
   )
 }

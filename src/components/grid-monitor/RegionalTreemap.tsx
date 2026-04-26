@@ -14,30 +14,30 @@ function PriceTile({ label, sub, lmp }: { label: string; sub: string; lmp: LMPRo
   const color = lmp ? priceColor(lmp.lmp) : 'var(--text-muted)'
   return (
     <div
-      className="flex flex-col justify-between rounded p-3 border border-[var(--border-subtle)]"
+      className="flex flex-col justify-between rounded p-2 border border-[var(--border-subtle)] overflow-hidden"
       style={{
         background: lmp ? `linear-gradient(135deg, ${color}11 0%, transparent 70%)` : 'transparent',
       }}
     >
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-xs font-semibold text-[var(--text-primary)]">{label}</span>
-        <span className="font-mono text-[10px] text-[var(--text-muted)]">{sub}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-xs font-semibold text-[var(--text-primary)] truncate">{label}</span>
+        <span className="font-mono text-[9px] text-[var(--text-muted)] flex-shrink-0 truncate max-w-[50%]">{sub}</span>
       </div>
       {lmp ? (
-        <div className="flex items-baseline gap-2 mt-2">
-          <span className="font-mono text-2xl font-semibold" style={{ color }}>
+        <div className="flex items-baseline gap-1.5 mt-1">
+          <span className="font-mono text-xl font-semibold leading-none" style={{ color }}>
             ${lmp.lmp.toFixed(2)}
           </span>
-          <span className="font-mono text-[10px] text-[var(--text-muted)]">/MWh</span>
+          <span className="font-mono text-[9px] text-[var(--text-muted)]">/MWh</span>
         </div>
       ) : (
-        <span className="font-mono text-xs text-[var(--text-muted)] mt-2">No data</span>
+        <span className="font-mono text-xs text-[var(--text-muted)] mt-1">No data</span>
       )}
       {lmp && (
-        <div className="flex gap-3 mt-2 font-mono text-[10px] text-[var(--text-muted)]">
-          <span>energy ${lmp.energy.toFixed(1)}</span>
-          <span>cong ${lmp.congestion.toFixed(1)}</span>
-          <span>loss ${lmp.loss.toFixed(1)}</span>
+        <div className="flex gap-2 mt-1 font-mono text-[9px] text-[var(--text-muted)] flex-wrap">
+          <span>E ${lmp.energy.toFixed(1)}</span>
+          <span>C ${lmp.congestion.toFixed(1)}</span>
+          <span>L ${lmp.loss.toFixed(1)}</span>
         </div>
       )}
     </div>

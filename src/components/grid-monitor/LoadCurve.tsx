@@ -3,8 +3,8 @@
 import { useMemo } from 'react'
 import { motion } from 'motion/react'
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Line, LineChart, ComposedChart,
+  Area, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Line, ComposedChart,
 } from 'recharts'
 import { format } from 'date-fns'
 import { useGridStore } from '@/stores/gridStore'
@@ -61,12 +61,12 @@ export default function LoadCurve() {
 
   return (
     <motion.div
-      initial={{ scaleX: 0, transformOrigin: 'left' }}
-      animate={{ scaleX: 1 }}
-      transition={{ duration: 0.8 }}
-      className="w-full h-full"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.6 }}
+      className="w-full h-full overflow-hidden"
     >
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minHeight={80}>
         <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
           <defs>
             <linearGradient id="actualGradient" x1="0" y1="0" x2="0" y2="1">

@@ -13,7 +13,7 @@ const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
       <div
         ref={ref}
         className={cn(
-          'glass-panel rounded-lg',
+          'glass-panel rounded-lg overflow-hidden',
           !noPadding && 'p-4',
           className
         )}
