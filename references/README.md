@@ -1,232 +1,326 @@
 # Grid Dashboard — API Reference & Setup
 
-## Env vars (.env.local)
+## Data sources
 
-```
-EIA_API_KEY=          # free at https://www.eia.gov/opendata/
-ERCOT_API_KEY=        # free at https://developer.ercot.com/
-```
-
-PJM and Open-Meteo need no key.
+| Data                        | Source                 | Auth                 |
+| --------------------------- | ---------------------- | -------------------- |
+| Load, fuel mix, LMP pricing | GridStatus.io REST API | `GRIDSTATUS_API_KEY` |
+| Weather                     | Open-Meteo             | None                 |
 
 ---
 
-## Live API Endpoints → Expected Response Shapes
+## Env vars (.env.local)ok
 
-### 1. EIA v2 — Demand + Generation by Fuel
-**URL**: `https://api.eia.gov/v2/electricity/rto/region-data/data/`
-**Granularity**: Hourly (~1h lag)
-**Key params**: `respondent=ERCO`, `type=D|NG|TI|DF`, `api_key=`
-
-```json
-{
-  "response": {
-    "data": [
-      {
-        "period": "2024-01-15T14",
-        "respondent": "ERCO",
-        "respondent-name": "Electric Reliability Council of Texas, Inc.",
-        "type": "D",
-        "type-name": "Demand",
-        "value": "52400",
-        "value-units": "megawatthours"
-      }
-    ]
-  }
-}
+```bash
+GRIDSTATUS_API_KEY=   # sign up free at https://www.gridstatus.io → Settings
 ```
 
-**type codes**:
-- `D`  = Demand (actual load MW)
-- `DF` = Demand Forecast
-- `NG` = Net Generation
-- `TI` = Total Interchange
-
-**Fuel type endpoint**: `.../rto/fuel-type-data/data/`
-```json
-{
-  "response": {
-    "data": [
-      {
-        "period": "2024-01-15T14",
-        "respondent": "ERCO",
-        "fueltype": "WND",
-        "type-name": "Net generation",
-        "value": "13600",
-        "value-units": "megawatthours"
-      }
-    ]
-  }
-}
-```
-
-**fueltype codes**: `NG`=gas, `SUN`=solar, `WND`=wind, `WAT`=hydro, `NUC`=nuclear, `COL`=coal, `OTH`=other, `STO`=storage
+> **Free tier**: 1 million rows/month. Always pass `limit` on every request — real-time LMP data is row-heavy and will exhaust the quota fast without it.
 
 ---
 
-### 2. ERCOT API — System Frequency + Real-time Load
-**URL**: `https://api.ercot.com/api/public-reports/np6-345-cd/act_sys_load_by_wzn`
-**Granularity**: 5-minute real-time
-**Header**: `Ocp-Apim-Subscription-Key: {ERCOT_API_KEY}`
+## Architecture
 
-```json
-{
-  "_meta": {
-    "version": "1.0",
-    "status": "SUCCESS",
-    "request_timestamp": "2024-01-15T14:05:00Z"
-  },
-  "data": [
-    {
-      "timestamp": "2024-01-15T14:00:00-06:00",
-      "deliveryDate": "2024-01-15",
-      "hourEnding": "14:00",
-      "systemLoad": "52400.5",
-      "windOutput": "13620.8",
-      "solarOutput": "1240.2",
-      "dcTieFlowTotal": "0.0"
-    }
-  ]
-}
+Never call GridStatus from the browser — the API key must stay server-side. The pattern is:
+
+```
+Client (React)  →  /app/api/grid/route.ts  →  GridStatus + Open-Meteo
 ```
 
-**Frequency endpoint**: `.../np4-187-cd/nprr_syststatus`
-```json
-{
-  "data": [
-    {
-      "timestamp": "2024-01-15T14:05:00-06:00",
-      "systemFrequency": "59.98",
-      "systemLoad": "52400.5"
-    }
-  ]
+The route fans out all fetches in parallel with `Promise.all`, waits for all of them, then returns a single `DashboardSnapshot` response.
+
+---
+
+## Base URL & auth helper
+
+```ts
+// lib/gridstatus.ts
+
+const BASE = "https://api.gridstatus.io/v1/datasets";
+
+export async function gs<T>(
+  dataset: string,
+  params: Record<string, string>,
+): Promise<T[]> {
+  const url = new URL(`${BASE}/${dataset}/query`);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+
+  const res = await fetch(url.toString(), {
+    headers: { "x-api-key": process.env.GRIDSTATUS_API_KEY! },
+    next: { revalidate: 300 }, // Next.js cache — 5 min
+  });
+
+  if (!res.ok) throw new Error(`GridStatus [${dataset}] ${res.status}`);
+  const json = await res.json();
+  return json.data as T[];
 }
 ```
 
 ---
 
-### 3. PJM DataMiner2 — Real-time LMP
-**URL**: `https://dataminer2.pjm.com/feed/rt_unverified_fivemin_lmps/fields`
-**Granularity**: 5-minute
-**Auth**: Free account (session cookie) — no API key in header
+## API route — all fetches in parallel
 
-```json
-[
-  {
-    "datetime_beginning_utc": "2024-01-15 14:00:00",
-    "datetime_beginning_ept": "2024-01-15 09:00:00",
-    "pnode_id": 1,
-    "pnode_name": "PJM RTO",
-    "voltage": 0,
-    "equipment": "",
-    "type": "ZONE",
-    "zone": "PJM RTO",
-    "total_lmp_rt": 42.85,
-    "energy_price": 40.10,
-    "congestion_price": 1.95,
-    "loss_price": 0.80
-  }
-]
-```
+All six upstream calls fire simultaneously. Total latency is the slowest single call, not their sum.
 
-**Day-ahead**: `.../feed/da_hrl_lmps/fields`
-```json
-[
-  {
-    "datetime_beginning_utc": "2024-01-15 14:00:00",
-    "pnode_name": "PJM RTO",
-    "total_lmp_da": 38.50,
-    "energy_price_da": 36.20,
-    "congestion_price_da": 1.50,
-    "loss_price_da": 0.80
-  }
-]
-```
+```ts
+// app/api/grid/route.ts
+import { gs } from "@/lib/gridstatus";
 
----
+export async function GET() {
+  const [load, fuelMix, ercotLMPRt, ercotLMPDa, pjmLMPRt, pjmLMPDa, weather] =
+    await Promise.all([
+      fetchLoad(),
+      fetchFuelMix(),
+      fetchERCOTLMPRealtime(),
+      fetchERCOTLMPDayAhead(),
+      fetchPJMLMPRealtime(),
+      fetchPJMLMPDayAhead(),
+      fetchWeather(),
+    ]);
 
-### 4. Open-Meteo — Weather Context
-**URL**: `https://api.open-meteo.com/v1/forecast`
-**Granularity**: Hourly. Free, no key.
-
-```json
-{
-  "latitude": 30.27,
-  "longitude": -97.74,
-  "timezone": "UTC",
-  "hourly": {
-    "time": ["2024-01-15T00:00", "2024-01-15T01:00"],
-    "temperature_2m": [22.4, 21.8],
-    "wind_speed_10m": [8.4, 9.1],
-    "wind_direction_10m": [315, 320],
-    "direct_normal_irradiance": [0, 0],
-    "precipitation": [0.2, 0.0]
-  }
-}
-```
-
----
-
-## Unified DashboardSnapshot shape (live + mock share this)
-
-```typescript
-{
-  realtime: {
-    timestamp_utc: string,              // ISO 8601
-    balancing_authority_code: ISOCode,  // "ERCO" | "CISO" | "PJM" | ...
-    nerc_region: NERCRegion,            // "TRE" | "WECC" | "RF" | ...
-    demand_mw: number,
-    load_forecast_mw: number,
-    load_deviation_mw: number,          // demand - forecast
-    net_generation_mw: number,
-    generation_by_fuel: {
-      natural_gas: number,
-      coal: number,
-      nuclear: number,
-      wind: number,
-      solar: number,
-      hydro: number,
-      storage: number,
-      other: number
+  return Response.json({
+    realtime: { ...load, ...fuelMix },
+    pricing: {
+      ercot: { realtime: ercotLMPRt, day_ahead: ercotLMPDa },
+      pjm: { realtime: pjmLMPRt, day_ahead: pjmLMPDa },
     },
-    net_interchange_mw: number,         // positive = import
-    frequency_hz: number,               // 60.0 nominal
-    reserve_margin_pct: number,
-    severity: "normal" | "warning" | "critical"
-  },
-  pricing: {
-    timestamp_utc: string,
-    balancing_authority_code: ISOCode,
-    lmp_rt_usd_per_mwh: number,
-    lmp_da_usd_per_mwh: number,
-    lmp_congestion_component: number,
-    lmp_loss_component: number,
-    lmp_energy_component: number
-  },
-  weather: {
-    timestamp_utc: string,
-    latitude: number,
-    longitude: number,
-    temperature_c: number,
-    wind_speed_ms: number,
-    wind_direction_deg: number,
-    solar_irradiance_wm2: number,
-    precipitation_mm: number
-  },
-  incident: null | {
-    incident_id: string,
-    event_date: string,                 // YYYY-MM-DD
-    event_time_local: string,           // HH:MM
-    event_type: string,                 // OE-417 raw type
-    area_affected: string,
-    load_loss_mw: number | null,
-    customers_affected: number | null,
-    frequency_hz_at_event: number | null,
-    restoration_datetime: string | null,
-    duration_hours: number | null,
-    severity: "normal" | "warning" | "critical",
-    narrative: string
+    weather,
+  });
+}
+```
+
+---
+
+## Individual fetchers
+
+Each function is `async` and independently awaitable — they're only called together via `Promise.all` above.
+
+### Load — `ercot_load`
+
+```ts
+async function fetchLoad() {
+  const rows = await gs<{
+    interval_start_utc: string;
+    interval_end_utc: string;
+    load: number;
+  }>("ercot_load", { time: "latest", limit: "1" });
+
+  return rows[0];
+  // { interval_start_utc, interval_end_utc, load }
+}
+```
+
+### Fuel mix — `ercot_fuel_mix`
+
+```ts
+async function fetchFuelMix() {
+  const rows = await gs<{
+    interval_start_utc: string;
+    natural_gas: number;
+    coal: number;
+    nuclear: number;
+    wind: number;
+    solar: number;
+    hydro: number;
+    other: number;
+  }>("ercot_fuel_mix", { time: "latest", limit: "1" });
+
+  return rows[0];
+  // { interval_start_utc, natural_gas, coal, nuclear, wind, solar, hydro, other }
+  // all values in MW
+}
+```
+
+### ERCOT LMP — real-time
+
+```ts
+async function fetchERCOTLMPRealtime() {
+  const rows = await gs<{
+    interval_start_utc: string;
+    location: string;
+    location_type: string;
+    lmp: number;
+    energy: number;
+    congestion: number;
+    loss: number; // always 0 — ERCOT doesn't publish loss
+  }>("ercot_lmp_by_settlement_point", {
+    time: "latest",
+    filter_column: "location",
+    filter_value: "HB_NORTH", // options: HB_NORTH, HB_HOUSTON, HB_WEST, HB_SOUTH
+    limit: "1",
+  });
+
+  return rows[0];
+}
+```
+
+### ERCOT LMP — day-ahead
+
+```ts
+async function fetchERCOTLMPDayAhead() {
+  const rows = await gs<{
+    interval_start_utc: string;
+    location: string;
+    lmp: number;
+  }>("ercot_spp_day_ahead_hourly", {
+    time: "latest",
+    filter_column: "location",
+    filter_value: "HB_NORTH",
+    limit: "24",
+  });
+
+  return rows; // 24 hourly rows for the next operating day
+}
+```
+
+### PJM LMP — real-time
+
+```ts
+async function fetchPJMLMPRealtime() {
+  const rows = await gs<{
+    interval_start_utc: string;
+    location: string;
+    location_type: string;
+    lmp: number;
+    energy: number;
+    congestion: number;
+    loss: number;
+  }>("pjm_lmp_real_time_5_min", {
+    time: "latest",
+    filter_column: "location",
+    filter_value: "PJM RTO",
+    limit: "1",
+  });
+
+  return rows[0];
+}
+```
+
+### PJM LMP — day-ahead
+
+```ts
+async function fetchPJMLMPDayAhead() {
+  const rows = await gs<{
+    interval_start_utc: string;
+    location: string;
+    lmp: number;
+    energy: number;
+    congestion: number;
+    loss: number;
+  }>("pjm_lmp_day_ahead_hourly", {
+    time: "latest",
+    filter_column: "location",
+    filter_value: "PJM RTO",
+    limit: "24",
+  });
+
+  return rows; // 24 hourly rows for the next operating day
+}
+```
+
+### Weather — Open-Meteo
+
+```ts
+async function fetchWeather() {
+  // Adjust lat/lon for your target location (below: Austin, TX)
+  const url =
+    "https://api.open-meteo.com/v1/forecast" +
+    "?latitude=30.27&longitude=-97.74" +
+    "&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,direct_normal_irradiance,precipitation" +
+    "&wind_speed_unit=ms" + // returns m/s — matches DashboardSnapshot.wind_speed_ms
+    "&forecast_days=1";
+
+  const res = await fetch(url, { next: { revalidate: 1800 } }); // cache 30 min
+  if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+
+  const json = await res.json();
+
+  // Return only the current hour's slice
+  const now = new Date();
+  const currentHour = now.getUTCHours();
+
+  return {
+    timestamp_utc: json.hourly.time[currentHour],
+    temperature_c: json.hourly.temperature_2m[currentHour],
+    wind_speed_ms: json.hourly.wind_speed_10m[currentHour],
+    wind_direction_deg: json.hourly.wind_direction_10m[currentHour],
+    solar_irradiance_wm2: json.hourly.direct_normal_irradiance[currentHour],
+    precipitation_mm: json.hourly.precipitation[currentHour],
+  };
+}
+```
+
+> **Wind speed**: `wind_speed_unit=ms` is required. Without it, Open-Meteo defaults to km/h, which won't match the `wind_speed_ms` field in `DashboardSnapshot`.
+
+---
+
+## Error handling
+
+Wrap the `Promise.all` in a try/catch in the route handler so one failing upstream call doesn't crash the whole response:
+
+```ts
+export async function GET() {
+  try {
+    const [load, fuelMix, ercotLMPRt, ercotLMPDa, pjmLMPRt, pjmLMPDa, weather] =
+      await Promise.all([
+        fetchLoad(),
+        fetchFuelMix(),
+        fetchERCOTLMPRealtime(),
+        fetchERCOTLMPDayAhead(),
+        fetchPJMLMPRealtime(),
+        fetchPJMLMPDayAhead(),
+        fetchWeather(),
+      ]);
+
+    return Response.json({
+      realtime: { ...load, ...fuelMix },
+      pricing: {
+        ercot: { realtime: ercotLMPRt, day_ahead: ercotLMPDa },
+        pjm: { realtime: pjmLMPRt, day_ahead: pjmLMPDa },
+      },
+      weather,
+    });
+  } catch (err) {
+    console.error("[grid/route]", err);
+    return Response.json({ error: "upstream fetch failed" }, { status: 502 });
   }
+}
+```
+
+If you want partial failures to be tolerated rather than fatal, swap `Promise.all` for `Promise.allSettled` and handle each result individually:
+
+```ts
+const results = await Promise.allSettled([
+  fetchLoad(),
+  fetchFuelMix(),
+  // ...
+]);
+
+const [load, fuelMix, ...] = results.map((r) =>
+  r.status === "fulfilled" ? r.value : null,
+);
+```
+
+---
+
+## Client-side polling (React hook)
+
+```ts
+// hooks/useGridDashboard.ts
+import useSWR from "swr";
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+export function useGridDashboard() {
+  const { data, error, isLoading } = useSWR("/api/grid", fetcher, {
+    refreshInterval: 300_000, // re-poll every 5 min
+  });
+
+  return {
+    snapshot: data ?? null,
+    isLoading,
+    isError: !!error,
+  };
 }
 ```
 
@@ -235,29 +329,23 @@ PJM and Open-Meteo need no key.
 ## File structure
 
 ```
-src/
-├── types/
-│   └── grid.ts              ← all interfaces
-├── api/
-│   ├── fetchers.ts          ← live API functions
-│   ├── useGridDashboard.ts  ← React hook (live + mock toggle)
-│   └── route.ts             ← Next.js /app/api/grid/route.ts
-└── mock/
-    └── incident-frames.ts   ← 7-frame Winter Storm Uri dataset
+app/
+└── api/
+    └── grid/
+        └── route.ts        ← parallel fetches, returns DashboardSnapshot
+lib/
+└── gridstatus.ts           ← gs() helper
+hooks/
+└── useGridDashboard.ts     ← SWR polling hook
 ```
 
 ---
 
-## Frontend toggle pattern
+## Known limitations
 
-```tsx
-const { snapshot, isMock, startMock, stopMock } = useGridDashboard();
-
-// In your component:
-<button onClick={isMock ? stopMock : startMock}>
-  {isMock ? "← Back to Live" : "⚡ Mock Incident"}
-</button>
-
-// snapshot.incident is null during live mode,
-// populated with OE-417 fields during mock mode.
-```
+| Topic                | Detail                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| ERCOT frequency      | Not in any public ERCOT feed. Hardcode `60.0` in normal mode; use mock for incident simulation. |
+| ERCOT LMP loss       | Always `0` — ERCOT doesn't publish loss components.                                             |
+| Open-Meteo wind      | Must include `&wind_speed_unit=ms`. Default is km/h.                                            |
+| GridStatus free tier | 1M rows/month. Always pass `limit`. LMP data for all nodes is very large — filter by location.  |

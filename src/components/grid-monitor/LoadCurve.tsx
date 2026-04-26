@@ -30,6 +30,7 @@ function CustomTooltip({ active, payload, label }: any) {
 
 export default function LoadCurve() {
   const loadHistory = useGridStore((s) => s.loadHistory)
+  const demoMode = useGridStore((s) => s.demoMode)
 
   const chartData = useMemo(() =>
     loadHistory.map((p) => ({
@@ -94,16 +95,19 @@ export default function LoadCurve() {
             dot={false}
             isAnimationActive={false}
           />
-          <Line
-            type="monotone"
-            dataKey="forecast"
-            name="Forecast"
-            stroke="rgba(255,255,255,0.4)"
-            strokeWidth={1}
-            strokeDasharray="4 4"
-            dot={false}
-            isAnimationActive={false}
-          />
+          {/* LIVE_MODE_HIDDEN — load forecast has no live API source. Demo only. */}
+          {demoMode && (
+            <Line
+              type="monotone"
+              dataKey="forecast"
+              name="Forecast"
+              stroke="rgba(255,255,255,0.4)"
+              strokeWidth={1}
+              strokeDasharray="4 4"
+              dot={false}
+              isAnimationActive={false}
+            />
+          )}
         </ComposedChart>
       </ResponsiveContainer>
     </motion.div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion } from 'motion/react'
 import { useGridStore } from '@/stores/gridStore'
 import { getFrequencyZone } from '@/lib/formatters'
@@ -58,8 +58,25 @@ const ZONE_ARCS = [
 const TICK_VALUES = [59.85, 59.9, 59.95, 60.0, 60.05, 60.1, 60.15]
 
 export default function FrequencyGauge() {
-  const frequency = useGridStore((s) => s.metrics.frequency)
-  const safeFreq = isNaN(frequency) ? 60.0 : frequency
+  const demoMode = useGridStore((s) => s.demoMode)
+  const storeFrequency = useGridStore((s) => s.metrics.frequency)
+
+  // In live mode: gentle ±0.035 Hz nominal oscillation (20-second period).
+  // Stays entirely within green zone (59.965–60.035 Hz). No API source exists
+  // for ERCOT frequency — this keeps the gauge alive without fabricating data.
+  const [nominalFreq, setNominalFreq] = useState(60.0)
+  useEffect(() => {
+    if (demoMode) return
+    let t = 0
+    const id = setInterval(() => {
+      t += 0.2 // 200ms tick → full 20s period at 2π/100 steps
+      setNominalFreq(60.0 + 0.035 * Math.sin((t * 2 * Math.PI) / 100))
+    }, 200)
+    return () => clearInterval(id)
+  }, [demoMode])
+
+  const rawFreq = demoMode ? storeFrequency : nominalFreq
+  const safeFreq = isNaN(rawFreq) ? 60.0 : rawFreq
   const zone = getFrequencyZone(safeFreq)
 
   const zoneColor = zone === 'nominal'
@@ -69,8 +86,6 @@ export default function FrequencyGauge() {
     : 'var(--accent-red)'
 
   const needleDeg = hzToDeg(Math.max(FREQUENCY_DISPLAY_MIN, Math.min(FREQUENCY_DISPLAY_MAX, safeFreq)))
-  const needleTip = polarXY(CX, CY, R_INNER - 4, needleDeg)
-
   const deviation = safeFreq - 60.0
   const devText = `Δ ${deviation >= 0 ? '+' : ''}${deviation.toFixed(3)} Hz`
 
@@ -158,6 +173,18 @@ export default function FrequencyGauge() {
         >
           {devText}
         </text>
+        {!demoMode && (
+          <text
+            x={CX} y={CY + 6}
+            textAnchor="middle"
+            fontSize={7}
+            fill="var(--text-muted)"
+            fontFamily="IBM Plex Mono, monospace"
+            opacity={0.5}
+          >
+            NOMINAL · NO LIVE FEED
+          </text>
+        )}
       </svg>
     </div>
   )

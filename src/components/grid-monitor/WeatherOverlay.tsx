@@ -1,137 +1,83 @@
 'use client'
 
-import { useMemo } from 'react'
-import { MOCK_WEATHER_CELLS } from '@/lib/mock-data/gridGenerator'
+import { useGridStore } from '@/stores/gridStore'
 
-// Simplified US projection: lat/lon to SVG x/y
-// Approximate: lon -130 to -65, lat 24 to 50
-function project(lat: number, lon: number, w: number, h: number) {
-  const x = ((lon - (-130)) / (65)) * w
-  const y = ((50 - lat) / (26)) * h
-  return { x, y }
+function describeWind(deg: number): string {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+  const idx = Math.round(((deg % 360) / 45)) % 8
+  return dirs[idx]
+}
+
+function StatBlock({ label, value, unit, accent }: { label: string; value: string; unit: string; accent: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
+        {label}
+      </span>
+      <div className="flex items-baseline gap-1">
+        <span className="font-mono text-lg font-semibold" style={{ color: accent }}>
+          {value}
+        </span>
+        <span className="font-mono text-[10px] text-[var(--text-muted)]">{unit}</span>
+      </div>
+    </div>
+  )
 }
 
 export default function WeatherOverlay() {
-  const cells = MOCK_WEATHER_CELLS
-  const W = 400
-  const H = 250
+  const weather = useGridStore((s) => s.weather)
+
+  if (!weather) {
+    return (
+      <div className="flex items-center justify-center h-full text-[var(--text-muted)] font-mono text-xs">
+        Loading weather…
+      </div>
+    )
+  }
+
+  const tempF = weather.temperature_c * 9 / 5 + 32
+  const windMph = weather.wind_speed_ms * 2.237
+  const isStorm = weather.precipitation_mm >= 2 || windMph >= 35
+  const accent = isStorm ? 'var(--accent-amber)' : 'var(--accent-cyan)'
 
   return (
-    <div className="w-full h-full relative" aria-label="Weather overlay">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full h-full"
-        style={{ background: 'rgba(10,14,23,0.3)' }}
-      >
-        {/* Simplified US outline as a rough rectangle with cutouts */}
-        <rect x={10} y={10} width={W - 20} height={H - 20}
-          fill="rgba(255,255,255,0.02)"
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth={0.8}
-          rx={4}
-        />
-
-        {/* Grid lines */}
-        {[0.25, 0.5, 0.75].map((t) => (
-          <g key={t}>
-            <line
-              x1={10 + t * (W - 20)} y1={10}
-              x2={10 + t * (W - 20)} y2={H - 10}
-              stroke="rgba(255,255,255,0.04)" strokeWidth={0.5}
-            />
-            <line
-              x1={10} y1={10 + t * (H - 20)}
-              x2={W - 10} y2={10 + t * (H - 20)}
-              stroke="rgba(255,255,255,0.04)" strokeWidth={0.5}
-            />
-          </g>
-        ))}
-
-        {/* State/region labels */}
-        {[
-          { name: 'CAISO', lat: 36, lon: -119 },
-          { name: 'ERCOT', lat: 31, lon: -99 },
-          { name: 'PJM', lat: 40, lon: -79 },
-          { name: 'MISO', lat: 42, lon: -90 },
-          { name: 'SPP', lat: 37, lon: -97 },
-          { name: 'WECC', lat: 45, lon: -113 },
-        ].map(({ name, lat, lon }) => {
-          const { x, y } = project(lat, lon, W, H)
-          return (
-            <text
-              key={name}
-              x={x} y={y}
-              textAnchor="middle"
-              fontSize={6}
-              fill="rgba(255,255,255,0.2)"
-              fontFamily="IBM Plex Mono"
-            >
-              {name}
-            </text>
-          )
-        })}
-
-        {/* Weather cells */}
-        {cells.map((cell) => {
-          const { x, y } = project(cell.lat, cell.lon, W, H)
-
-          if (cell.type === 'storm') {
-            return (
-              <g key={cell.id}>
-                {/* Animated radar rings */}
-                {[1, 2].map((ring) => (
-                  <circle
-                    key={ring}
-                    cx={x} cy={y}
-                    r={8 * cell.intensity}
-                    fill="none"
-                    stroke="#FF6B35"
-                    strokeWidth={1}
-                    opacity={ring === 1 ? 0.5 : 0.25}
-                    style={{
-                      animation: `radar-pulse ${1.5 + ring * 0.5}s ease-out ${ring * 0.4}s infinite`,
-                    }}
-                  />
-                ))}
-                <circle cx={x} cy={y} r={3 * cell.intensity} fill="rgba(255,107,53,0.6)" />
-                <text x={x + 6} y={y - 4} fontSize={5.5} fill="#FF6B35" fontFamily="IBM Plex Mono">
-                  {cell.label}
-                </text>
-              </g>
-            )
-          }
-
-          if (cell.type === 'wind') {
-            return (
-              <g key={cell.id}>
-                <circle cx={x} cy={y} r={4} fill="rgba(0,240,255,0.3)" stroke="#00F0FF" strokeWidth={0.5} />
-                <text x={x + 6} y={y} fontSize={5.5} fill="#00F0FF" fontFamily="IBM Plex Mono">
-                  {cell.label}
-                </text>
-              </g>
-            )
-          }
-
-          return (
-            <g key={cell.id}>
-              <circle cx={x} cy={y} r={6} fill="rgba(240,187,64,0.2)" stroke="#F0BB40" strokeWidth={0.5} />
-              <text x={x + 7} y={y} fontSize={5.5} fill="#F0BB40" fontFamily="IBM Plex Mono">
-                {cell.label}
-              </text>
-            </g>
-          )
-        })}
-
-        {/* Legend */}
-        <g transform="translate(10, 220)">
-          <circle cx={4} cy={4} r={3} fill="rgba(255,107,53,0.6)" />
-          <text x={10} y={7} fontSize={5} fill="rgba(255,255,255,0.4)" fontFamily="IBM Plex Mono">Storm</text>
-          <circle cx={44} cy={4} r={3} fill="rgba(0,240,255,0.3)" stroke="#00F0FF" strokeWidth={0.5} />
-          <text x={50} y={7} fontSize={5} fill="rgba(255,255,255,0.4)" fontFamily="IBM Plex Mono">Wind</text>
-          <circle cx={82} cy={4} r={3} fill="rgba(240,187,64,0.2)" stroke="#F0BB40" strokeWidth={0.5} />
-          <text x={88} y={7} fontSize={5} fill="rgba(255,255,255,0.4)" fontFamily="IBM Plex Mono">Temp anomaly</text>
-        </g>
-      </svg>
+    <div className="w-full h-full p-4 grid grid-cols-3 gap-4 content-center" aria-label="Live weather">
+      <StatBlock
+        label="Temp"
+        value={`${tempF.toFixed(0)}°`}
+        unit={`F · ${weather.temperature_c.toFixed(1)}°C`}
+        accent={accent}
+      />
+      <StatBlock
+        label="Wind"
+        value={`${windMph.toFixed(0)}`}
+        unit={`mph · ${describeWind(weather.wind_direction_deg)}`}
+        accent={accent}
+      />
+      <StatBlock
+        label="Solar Irr."
+        value={`${weather.solar_irradiance_wm2.toFixed(0)}`}
+        unit="W/m²"
+        accent="var(--accent-amber)"
+      />
+      <StatBlock
+        label="Precip."
+        value={`${weather.precipitation_mm.toFixed(1)}`}
+        unit="mm"
+        accent={weather.precipitation_mm > 0 ? 'var(--accent-cyan)' : 'var(--text-secondary)'}
+      />
+      <div className="col-span-2 flex items-end">
+        <span className="font-mono text-[10px] text-[var(--text-muted)]">
+          {new Date(weather.timestamp_utc).toLocaleString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZoneName: 'short',
+          })}
+          {' · '}Open-Meteo · 30.27°N, 97.74°W
+        </span>
+      </div>
     </div>
   )
 }
