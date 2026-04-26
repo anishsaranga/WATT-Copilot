@@ -3,23 +3,22 @@
 import { useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCopilotStore } from '@/stores/copilotStore'
-import SystemMessage from './messages/SystemMessage'
 import AlertMessage from './messages/AlertMessage'
 import StreamingText from './messages/StreamingText'
 import PrecedentList from './messages/PrecedentCard'
-import RecommendationCard from './messages/RecommendationCard'
-import OperatorMessage from './messages/OperatorMessage'
-import EscalationQuestion from './messages/EscalationQuestion'
 
 export default function MessageStream() {
   const messages = useCopilotStore((s) => s.messages)
+  const visibleMessages = messages.filter(
+    (msg) => msg.type === 'alert' || msg.type === 'precedent' || msg.type === 'streaming'
+  )
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
     }
-  }, [messages.length])
+  }, [visibleMessages])
 
   return (
     <div
@@ -30,7 +29,7 @@ export default function MessageStream() {
       aria-label="WATT Co-Pilot messages"
     >
       <AnimatePresence initial={false}>
-        {messages.map((msg) => (
+        {visibleMessages.map((msg) => (
           <motion.div
             key={msg.id}
             initial={{ opacity: 0, y: 8 }}
@@ -38,9 +37,6 @@ export default function MessageStream() {
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.25 }}
           >
-            {msg.type === 'system' && (
-              <SystemMessage content={msg.content ?? ''} timestamp={msg.timestamp} />
-            )}
             {msg.type === 'alert' && (
               <AlertMessage
                 content={msg.content ?? ''}
@@ -57,28 +53,6 @@ export default function MessageStream() {
             )}
             {msg.type === 'precedent' && msg.precedents && (
               <PrecedentList precedents={msg.precedents} />
-            )}
-            {msg.type === 'recommendation' && msg.recommendation && (
-              <RecommendationCard
-                messageId={msg.id}
-                recommendation={msg.recommendation}
-                timestamp={msg.timestamp}
-              />
-            )}
-            {msg.type === 'operator' && (
-              <OperatorMessage
-                content={msg.content ?? ''}
-                timestamp={msg.timestamp}
-                operatorName={msg.operatorName}
-              />
-            )}
-            {msg.type === 'escalation' && msg.escalationOptions && (
-              <EscalationQuestion
-                messageId={msg.id}
-                content={msg.content ?? ''}
-                options={msg.escalationOptions}
-                selectedOption={msg.selectedOption}
-              />
             )}
           </motion.div>
         ))}

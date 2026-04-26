@@ -1,7 +1,15 @@
 import type { Precedent } from './incident'
 
 export type AgentStatus = 'monitoring' | 'analyzing' | 'drafting' | 'alert'
-export type MessageType = 'system' | 'alert' | 'streaming' | 'precedent' | 'recommendation' | 'operator' | 'escalation'
+export type MessageType =
+  | 'system'
+  | 'alert'
+  | 'streaming'
+  | 'precedent'
+  | 'recommendation'
+  | 'operator'
+  | 'escalation'
+  | 'agent_error'
 
 export interface Recommendation {
   situation: string
@@ -34,6 +42,7 @@ export interface CopilotMessage {
   escalationOptions?: EscalationOption[]
   selectedOption?: string
   alertSeverity?: 'warning' | 'critical'
+  retryable?: boolean
 }
 
 export interface StreamingState {
